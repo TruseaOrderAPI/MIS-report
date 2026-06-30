@@ -1776,22 +1776,26 @@ function renderHighlights(m) {
           <div class="hl-new-sub">Qty sold + Revenue per fish per month</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <select id="fishMatrixFilter" onchange="applyFishMatrixFilter()"
-            style="font-size:11px;font-weight:700;border:1.5px solid #e0e0e0;border-radius:8px;padding:5px 8px;background:#fff;color:#1a1a2e;cursor:pointer">
-            <option value="revenue">Sort: High Revenue</option>
-            <option value="qty_high">Sort: High Qty</option>
-            <option value="qty_low">Sort: Low Qty</option>
-          </select>
-          <button onclick="toggleFishMatrix()"
-            id="fishMatrixToggle"
-            style="background:#1a1a2e;color:#fff;border:none;border-radius:8px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
-            ▲ Collapse
-          </button>
           <button onclick="downloadSectionPDF('fishMatrixSection','Fish Sales Matrix')"
             style="background:#f0f0f0;color:#555;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer">
             ⬇️ PDF
           </button>
         </div>
+      </div>
+      <div style="padding:10px 14px;border-bottom:1px solid #f0f0f0;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="text" id="fishMatrixSearch" placeholder="🔍 Search fish name…" oninput="applyFishMatrixFilter()"
+          style="flex:1;min-width:140px;font-size:12px;padding:7px 12px;border:1.5px solid #e0e0e0;border-radius:10px;outline:none;font-family:inherit">
+        <select id="fishMatrixFilter" onchange="applyFishMatrixFilter()"
+          style="font-size:11px;font-weight:700;border:1.5px solid #e0e0e0;border-radius:8px;padding:7px 8px;background:#fff;color:#1a1a2e;cursor:pointer">
+          <option value="revenue">Sort: High Revenue</option>
+          <option value="qty_high">Sort: High Qty</option>
+          <option value="qty_low">Sort: Low Qty</option>
+        </select>
+        <button onclick="toggleFishMatrix()"
+          id="fishMatrixToggle"
+          style="background:#1a1a2e;color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+          ▲ Collapse
+        </button>
       </div>
       <div id="fishMatrixBody" style="overflow-x:auto">
         <table class="hl-table" id="fishMatrixTable">
@@ -2128,11 +2132,11 @@ function showHlTooltip(tooltipId, label, value, color) {
 }
 
 // ── FISH MATRIX HELPERS ──────────────────────────────
-function buildFishMatrixRows(allMonths, sortMode) {
+function buildFishMatrixRows(allMonths, sortMode, searchQuery) {
   const allFishKeys = [...new Set(
     allMonths.flatMap(mo => buildFishRevenueReport(mo.orders).map(f=>f.key))
   )];
-  const rows = allFishKeys.map(key => {
+  let rows = allFishKeys.map(key => {
     const monthData = allMonths.map(mo => {
       const fish = buildFishRevenueReport(mo.orders);
       return fish.find(f=>f.key===key) || { totalQty:0, totalRevenue:0 };
@@ -2141,11 +2145,18 @@ function buildFishMatrixRows(allMonths, sortMode) {
     const totalRev = monthData.reduce((a,d)=>a+d.totalRevenue, 0);
     return { key, monthData, totalQty, totalRev };
   });
+
+  // Search filter
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase().trim();
+    rows = rows.filter(r => r.key.toLowerCase().includes(q));
+  }
+
   if (sortMode==='qty_high') rows.sort((a,b)=>b.totalQty-a.totalQty);
   else if (sortMode==='qty_low') rows.sort((a,b)=>a.totalQty-b.totalQty);
   else rows.sort((a,b)=>b.totalRev-a.totalRev);
 
-  if (!rows.length) return `<tr><td colspan="20" style="text-align:center;color:#aaa;padding:16px">No data — make sure Col G & J have data</td></tr>`;
+  if (!rows.length) return `<tr><td colspan="20" style="text-align:center;color:#aaa;padding:16px">${searchQuery ? 'No fish matches "'+searchQuery+'"' : 'No data — make sure Col G & J have data'}</td></tr>`;
 
   return rows.map(row => {
     const cells = row.monthData.map(d =>
@@ -2169,10 +2180,11 @@ function buildFishMatrixRows(allMonths, sortMode) {
 
 function applyFishMatrixFilter() {
   const mode  = document.getElementById('fishMatrixFilter')?.value || 'revenue';
+  const query = document.getElementById('fishMatrixSearch')?.value || '';
   const tbody = document.getElementById('fishMatrixTbody');
   const d     = window._hlGraphData;
   if (!tbody || !d) return;
-  tbody.innerHTML = buildFishMatrixRows(d.allMonths, mode);
+  tbody.innerHTML = buildFishMatrixRows(d.allMonths, mode, query);
 }
 
 function toggleFishMatrix() {
@@ -2391,6 +2403,18 @@ function drawCustDayDualLine(canvasId, labels, ordData, revData, tooltipId) {
     }
   };
   canvas.addEventListener('click', canvas._hlClickHandler);
+}
+
+// ── CUSTOMER TABLE SEARCH ────────────────────────────
+function filterCustTable() {
+  const tbody  = document.getElementById('custTbody');
+  const search = document.getElementById('custSearch');
+  if (!tbody) return;
+  const query = (search?.value || '').toLowerCase().trim();
+  tbody.querySelectorAll('tr[data-cust-key]').forEach(row => {
+    const key = row.getAttribute('data-cust-key') || '';
+    row.style.display = (!query || key.includes(query)) ? '' : 'none';
+  });
 }
 
 // ── FISH SOLD TABLE SEARCH + SORT ────────────────────
@@ -2689,7 +2713,7 @@ function showArchiveMonth(idx) {
     });
     const fishStr = Object.entries(fishMap).sort((a,b)=>b[1]-a[1])
       .map(([n,q])=>n+' <b style="color:#0077b6">'+q+'</b>').join(' · ');
-    return '<tr style="' + (i%2===0?'':'background:#fafafa') + '">' +
+    return '<tr data-cust-key="' + (c.name+' '+c.phone).toLowerCase() + '" style="' + (i%2===0?'':'background:#fafafa') + '">' +
       '<td style="text-align:center;font-size:11px;color:#888;padding:8px 6px;font-weight:600">' + (i+1) + '</td>' +
       '<td style="padding:8px 10px"><div style="font-size:13px;font-weight:700;color:#1a1a2e">' + c.name + '</div>' +
         (c.aliases.length?'<div style="font-size:10px;color:#bbb">' + c.aliases.join(', ') + '</div>':'') +
@@ -2703,6 +2727,10 @@ function showArchiveMonth(idx) {
     '<div class="mis-card-header"><div><div class="mis-card-title">👥 Customer Purchase — ' + fullLabel + '</div>' +
     '<div class="mis-card-range">' + custs.length + ' customers · ' + orders.length + ' orders</div></div>' +
     '<button class="pdf-btn" onclick="downloadSectionPDF(&apos;arch_customers&apos;,&apos;'+fullLabel+' Customers&apos;)" style="margin:0;width:auto;padding:5px 10px;font-size:11px">⬇️ PDF</button></div>' +
+    '<div style="padding:10px 14px;border-bottom:1px solid #f0f0f0">' +
+      '<input type="text" id="custSearch" placeholder="🔍 Search customer name or phone…" oninput="filterCustTable()" ' +
+      'style="width:100%;font-size:12px;padding:7px 12px;border:1.5px solid #e0e0e0;border-radius:10px;outline:none;font-family:inherit;box-sizing:border-box">' +
+    '</div>' +
     '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">' +
     '<table style="width:100%;border-collapse:collapse;font-size:12px;min-width:480px">' +
     '<thead><tr style="background:#1a1a2e">' +
@@ -2712,7 +2740,7 @@ function showArchiveMonth(idx) {
       '<th style="padding:8px 8px;color:#90e0ef;font-size:10px;text-align:right">Value</th>' +
       '<th style="padding:8px 10px;color:#90e0ef;font-size:10px;text-align:left">Fish Ordered</th>' +
     '</tr></thead>' +
-    '<tbody>' + (custRows||'<tr><td colspan="5" class="empty-row">No orders</td></tr>') + '</tbody>' +
+    '<tbody id="custTbody">' + (custRows||'<tr><td colspan="5" class="empty-row">No orders</td></tr>') + '</tbody>' +
     '<tfoot><tr style="background:#f0f0f0;border-top:2px solid #1a1a2e">' +
       '<td colspan="2" style="padding:8px 12px;font-size:12px;font-weight:800;color:#1a1a2e">Total</td>' +
       '<td style="text-align:center;font-size:13px;font-weight:800;color:#1a1a2e;padding:8px">' + orders.length + '</td>' +
