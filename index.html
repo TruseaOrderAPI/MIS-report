@@ -1809,6 +1809,9 @@ function renderHighlights(m) {
           <tbody id="fishMatrixTbody">
             ${buildFishMatrixRows(allMonths, 'revenue')}
           </tbody>
+          <tfoot id="fishMatrixTfoot">
+            ${buildFishMatrixTotalRow(allMonths)}
+          </tfoot>
         </table>
       </div>
     </div>
@@ -2132,7 +2135,54 @@ function showHlTooltip(tooltipId, label, value, color) {
 }
 
 // ── FISH MATRIX HELPERS ──────────────────────────────
-function buildFishMatrixRows(allMonths, sortMode, searchQuery) {
+// Build total row for fish matrix — sums only the given rows (used for filtered totals too)
+function buildFishMatrixTotalRow(allMonths, rowsData) {
+  // If rowsData not passed, compute from full allFishKeys (initial load)
+  let dataRows = rowsData;
+  if (!dataRows) {
+    const allFishKeys = [...new Set(
+      allMonths.flatMap(mo => buildFishRevenueReport(mo.orders).map(f=>f.key))
+    )];
+    dataRows = allFishKeys.map(key => {
+      const monthData = allMonths.map(mo => {
+        const fish = buildFishRevenueReport(mo.orders);
+        return fish.find(f=>f.key===key) || { totalQty:0, totalRevenue:0 };
+      });
+      return { key, monthData };
+    });
+  }
+
+  const monthCount = allMonths.length;
+  const monthSums = Array.from({length: monthCount}, (_, mi) => {
+    const qty = dataRows.reduce((a,r) => a + (r.monthData[mi]?.totalQty || 0), 0);
+    const rev = dataRows.reduce((a,r) => a + (r.monthData[mi]?.totalRevenue || 0), 0);
+    return { qty, rev };
+  });
+
+  const grandQty = monthSums.reduce((a,m) => a+m.qty, 0);
+  const grandRev = monthSums.reduce((a,m) => a+m.rev, 0);
+
+  const monthCells = monthSums.map(m =>
+    m.qty === 0
+      ? `<td style="text-align:center;color:#ccc">—</td>`
+      : `<td style="text-align:center;padding:8px 10px">
+          <div style="font-size:12px;font-weight:900;color:#1a1a2e">${m.qty} qty</div>
+          <div style="font-size:10px;color:#16a34a;font-weight:800;margin-top:1px">${fmtMoney(Math.round(m.rev))}</div>
+        </td>`
+  ).join('');
+
+  return `<tr style="border-top:2px solid #1a1a2e;background:#f0f4ff">
+    <td style="position:sticky;left:0;background:#f0f4ff;z-index:1;font-size:12px;font-weight:900;color:#1a1a2e;padding:9px 12px" id="fishMatrixTotalLabel">Total (${dataRows.length} fish)</td>
+    ${monthCells}
+    <td style="text-align:center;background:#e0e8ff;padding:9px 10px">
+      <div style="font-size:13px;font-weight:900;color:#1a1a2e">${grandQty} qty</div>
+      <div style="font-size:11px;color:#16a34a;font-weight:900;margin-top:1px">${fmtMoney(Math.round(grandRev))}</div>
+    </td>
+  </tr>`;
+}
+
+// Compute filtered + sorted fish rows (shared by table body and total row)
+function computeFishMatrixRows(allMonths, sortMode, searchQuery) {
   const allFishKeys = [...new Set(
     allMonths.flatMap(mo => buildFishRevenueReport(mo.orders).map(f=>f.key))
   )];
@@ -2146,7 +2196,6 @@ function buildFishMatrixRows(allMonths, sortMode, searchQuery) {
     return { key, monthData, totalQty, totalRev };
   });
 
-  // Search filter
   if (searchQuery) {
     const q = searchQuery.toLowerCase().trim();
     rows = rows.filter(r => r.key.toLowerCase().includes(q));
@@ -2155,6 +2204,12 @@ function buildFishMatrixRows(allMonths, sortMode, searchQuery) {
   if (sortMode==='qty_high') rows.sort((a,b)=>b.totalQty-a.totalQty);
   else if (sortMode==='qty_low') rows.sort((a,b)=>a.totalQty-b.totalQty);
   else rows.sort((a,b)=>b.totalRev-a.totalRev);
+
+  return rows;
+}
+
+function buildFishMatrixRows(allMonths, sortMode, searchQuery) {
+  const rows = computeFishMatrixRows(allMonths, sortMode, searchQuery);
 
   if (!rows.length) return `<tr><td colspan="20" style="text-align:center;color:#aaa;padding:16px">${searchQuery ? 'No fish matches "'+searchQuery+'"' : 'No data — make sure Col G & J have data'}</td></tr>`;
 
@@ -2182,9 +2237,21 @@ function applyFishMatrixFilter() {
   const mode  = document.getElementById('fishMatrixFilter')?.value || 'revenue';
   const query = document.getElementById('fishMatrixSearch')?.value || '';
   const tbody = document.getElementById('fishMatrixTbody');
+  const tfoot = document.getElementById('fishMatrixTfoot');
   const d     = window._hlGraphData;
   if (!tbody || !d) return;
-  tbody.innerHTML = buildFishMatrixRows(d.allMonths, mode, query);
+
+  const rows = computeFishMatrixRows(d.allMonths, mode, query);
+
+  tbody.innerHTML = rows.length
+    ? buildFishMatrixRows(d.allMonths, mode, query)
+    : `<tr><td colspan="20" style="text-align:center;color:#aaa;padding:16px">${query ? 'No fish matches "'+query+'"' : 'No data — make sure Col G & J have data'}</td></tr>`;
+
+  if (tfoot) {
+    tfoot.innerHTML = rows.length
+      ? buildFishMatrixTotalRow(d.allMonths, rows)
+      : '';
+  }
 }
 
 function toggleFishMatrix() {
