@@ -924,6 +924,173 @@ function buildFishReport(orders) {
   return Object.values(map).sort((a,b)=>b.totalQty-a.totalQty);
 }
 
+// ── UNIQUE FISH NAME MAP (from Naveen's Unique_fish_names.xlsx) ───────
+// Maps every raw product-title variant (Premium/Regular/Fillet/Curry Cuts/
+// Cleaned Whole Fish/size-tag etc, all weights) → one canonical unique name.
+// Used ONLY by the Month Wise Fish Sales (date-wise) table below.
+const FISH_UNIQUE_NAME_MAP = {
+  'Anchovy (Nethili) Cleaned Whole Fish': 'Anchovy (Nethili)',
+  'Barracuda (Seela) Premium Slices': 'Barracuda (Seela)',
+  'Barracuda (Seela) Regular Slices': 'Barracuda (Seela)',
+  'Barracuda (Seela) Small Cleaned Whole Fish': 'Barracuda (Seela)',
+  'Barramundi (Koduva) Curry Cuts': 'Barramundi (Koduva)',
+  'Barramundi (Koduva) Fillets': 'Barramundi (Koduva)',
+  'Barramundi (Koduva) Premium Slices': 'Barramundi (Koduva)',
+  'Barramundi (Koduva) Regular Slices': 'Barramundi (Koduva)',
+  'Black Pomfret (Karuppu Vavval) Cleaned Whole Fish': 'Black Pomfret (Karuppu Vavval)',
+  'Black Pomfret (Karuppu Vavval) Premium Slices': 'Black Pomfret (Karuppu Vavval)',
+  'Black Sea Bass (Kal Koduva) Curry Cuts': 'Black Sea Bass (Kal Koduva)',
+  'Black Sea Bass (Kal Koduva) Fillets': 'Black Sea Bass (Kal Koduva)',
+  'Black Sea Bass (Kal Koduva) Premium Slices': 'Black Sea Bass (Kal Koduva)',
+  'Black Sea Bass (Kal Koduva) Regular Slices': 'Black Sea Bass (Kal Koduva)',
+  'Black Spot Snapper (Manja Sankara) Cleaned Whole Fish': 'Black Spot Snapper (Manja Sankara)',
+  'Black Spot Snapper (Manja Sankara) Premium Slices': 'Black Spot Snapper (Manja Sankara)',
+  'Black Spot Snapper (Manja Sankara) Thick Slices': 'Black Spot Snapper (Manja Sankara)',
+  'Blue Crabs (Neela Nandu) - Big': 'Blue Crabs (Neela Nandu)',
+  'Blue Crabs (Neela Nandu) - Medium': 'Blue Crabs (Neela Nandu)',
+  'Clams (Aali)': 'Clams (Aali)',
+  'Cod Fish (Kalavan) Curry Cuts': 'Cod Fish (Kalavan)',
+  'Cod Fish (Kalavan) Fillets': 'Cod Fish (Kalavan)',
+  'Cod Fish (Kalavan) Premium Slices': 'Cod Fish (Kalavan)',
+  'Croaker (Panna) Cleaned Whole Fish': 'Croaker (Panna)',
+  'Croaker (Panna) Thick Slices': 'Croaker (Panna)',
+  'Diamond Trevally (Kannadi Paarai) Premium Slices': 'Diamond Trevally',
+  'Diamond Trevally (Kannadi Paarai) Regular Slices': 'Diamond Trevally',
+  'Emperor Fish (Villai Meen) Premium Slices': 'Emperor Fish (Villai Meen)',
+  'Emperor Fish (Villai Meen) Regular Slices': 'Emperor Fish (Villai Meen)',
+  'Flathead Grey Mullet (Madavai Meen) Regular Slices': 'Flathead Grey Mullet (Madavai Meen)',
+  'Gar Fish (Kola Meen) - Regular Slices': 'Gar Fish (Kola Meen)',
+  'Goldline Bream (Mattivan) Regular Slices': 'Goldline Bream (Mattivan)',
+  'Grey Snapper (Mada Sankara) Cleaned Whole Fish': 'Grey Snapper (Mada Sankara)',
+  'Grey Snapper (Mada Sankara) Premium Slices': 'Grey Snapper (Mada Sankara)',
+  'Grey Snapper (Mada Sankara) Thick Slices': 'Grey Snapper (Mada Sankara)',
+  'Grouper (Kalava) Curry Cuts': 'Grouper (Kalava)',
+  'Grouper (Kalava) Regular Slices': 'Grouper (Kalava)',
+  'Indian Salmon (Kaala) Curry Cuts': 'Indian Salmon (Kaala)',
+  'Indian Salmon (Kaala) Premium Slices': 'Indian Salmon (Kaala)',
+  'Indian Salmon (Kaala) Thick Slices': 'Indian Salmon (Kaala)',
+  'Lady Fish (Kizhangaan) Cleaned Whole Fish': 'Lady Fish (Kizhangaan)',
+  'Lady Fish (Kizhangaan) Thick Slices': 'Lady Fish (Kizhangaan)',
+  'Lobster (Singi Iraal)': 'Lobster (Singi Iraal)',
+  'Mackerel (Kanangathai) Cleaned Whole Fish': 'Mackerel (Kanangathai)',
+  'Mackerel (Kanangathai) Thick Slices': 'Mackerel (Kanangathai)',
+  'Mahi Mahi (Parla) Premium Slices': 'Mahi Mahi (Parla)',
+  'Mahi Mahi (Parla) Regular Slices': 'Mahi Mahi (Parla)',
+  'Mud Crabs (Pachai Nandu)': 'Mud Crabs (Pachai Nandu)',
+  'Parrot Fish (Kili Meen)': 'Parrot Fish (Kili Meen)',
+  'Pink Perch (Sankara) Cleaned Whole Fish': 'Pink Perch (Sankara)',
+  'Pink Perch (Sankara) Thick Slices': 'Pink Perch (Sankara)',
+  'Rainbow Runner (Poonguzhali) Regular Slices': 'Rainbow Runner (Poonguzhali)',
+  'Red Sea Bass (Sigappu Koduva) Curry Cuts': 'Red Sea Bass (Sigappu Koduva)',
+  'Red Sea Bass (Sigappu Koduva) Fillets': 'Red Sea Bass (Sigappu Koduva)',
+  'Red Sea Bass (Sigappu Koduva) Premium Slices': 'Red Sea Bass (Sigappu Koduva)',
+  'Red Sea Bass (Sigappu Koduva) Regular Slices': 'Red Sea Bass (Sigappu Koduva)',
+  'Rohu (Kannadi Kendai)': 'Rohu (Kannadi Kendai)',
+  'Sardines (Mathi) Cleaned Whole Fish': 'Sardines (Mathi)',
+  'Sea Murrel (Kadal Veral) Premium Slices': 'Sea Murrel (Kadal Veral)',
+  'Sea Murrel (Kadal Veral) Regular Slices': 'Sea Murrel (Kadal Veral)',
+  'Seer Fish (Vanjaram) Curry Cuts': 'Seer Fish (Vanjaram)',
+  'Seer Fish (Vanjaram) Fillets': 'Seer Fish (Vanjaram)',
+  'Seer Fish (Vanjaram) Premium Slices': 'Seer Fish (Vanjaram)',
+  'Seer Fish (Vanjaram) Regular Slices': 'Seer Fish (Vanjaram)',
+  'Silver Belly (Karapodi) Cleaned Whole Fish': 'Silver Belly (Karapodi)',
+  'Sole Fish (Naaku Meen) Cleaned Whole Fish': 'Sole Fish (Naaku Meen)',
+  'Spade Fish (Paiynthi Meen) Cleaned Whole Fish': 'Spade Fish (Paiynthi Meen)',
+  'Spot Grouper (Pulli Kalava) Curry Cuts': 'Spot Grouper (Pulli Kalava)',
+  'Spot Grouper (Pulli Kalava) Fillets': 'Spot Grouper (Pulli Kalava)',
+  'Spot Grouper (Pulli Kalava) Premium Slices': 'Spot Grouper (Pulli Kalava)',
+  'Spot Grouper (Pulli Kalava) Regular Slices': 'Spot Grouper (Pulli Kalava)',
+  'Spotted Sea Crabs (Kadal Nandu)': 'Spotted Sea Crabs (Kadal Nandu)',
+  'Spotted Sickle Fish (Tharatta)': 'Spotted Sickle Fish (Tharatta)',
+  'Squid (Kanava)': 'Squid (Kanava)',
+  'Stingray (Thirukkai)': 'Stingray (Thirukkai)',
+  'Tiger Prawns (Vari Iral) - Jumbo': 'Tiger Prawns (Vari Iral)',
+  'Tiger Prawns (Vari Iral) - Large': 'Tiger Prawns (Vari Iral)',
+  'Tiger Prawns (Vari Iral) - Medium': 'Tiger Prawns (Vari Iral)',
+  'Tomato Grouper (Thakkali Kalava) Curry Cuts': 'Tomato Grouper (Thakkali Kalava)',
+  'Tomato Grouper (Thakkali Kalava) Regular Slices': 'Tomato Grouper (Thakkali Kalava)',
+  'Trevally (Thengai Paarai) Premium Slices': 'Trevally (Thengai Paarai)',
+  'Trevally (Thengai Paarai) Regular Slices': 'Trevally (Thengai Paarai)',
+  'Tuna (Choora) Cubes - Without Skin': 'Tuna (Choora)',
+  'Tuna (Choora) Fillets / Slices - Without Skin': 'Tuna (Choora)',
+  'White Pomfret (Vella Vavval) Cleaned Whole Fish': 'White Pomfret (Vella Vavval)',
+  'White Pomfret (Vella Vavval) Premium Slices': 'White Pomfret (Vella Vavval)',
+  'White Prawns (Vella Yera) - Big': 'White Prawns (Vella Yera)',
+  'White Prawns (Vella Yera) - Medium': 'White Prawns (Vella Yera)',
+  'White Prawns (Vella Yera) - Small': 'White Prawns (Vella Yera)',
+  'White Snapper (Korkkai)': 'White Snapper (Korkkai)',
+  'Yellowfin Tuna (Choora) Cubes - Without Skin': 'Yellowfin Tuna (Choora)',
+  'Yellowfin Tuna (Choora) Fillets / Slices - Without Skin': 'Yellowfin Tuna (Choora)',
+};
+// Lowercased lookup index, built once, so matching ignores case differences.
+const FISH_UNIQUE_NAME_MAP_LC = {};
+Object.keys(FISH_UNIQUE_NAME_MAP).forEach(k => {
+  FISH_UNIQUE_NAME_MAP_LC[k.toLowerCase()] = FISH_UNIQUE_NAME_MAP[k];
+});
+
+// Strip the trailing size (e.g. "- 1kg", "- 500g") off a raw item key,
+// leaving just the product-title portion to look up in the map.
+function stripSizeSuffix(key) {
+  const m = (key || '').match(/[-–]\s*\d+(?:\.\d+)?(?:g|kg)\s*$/i);
+  return m ? key.slice(0, key.length - m[0].length).trim() : (key || '').trim();
+}
+
+// Resolve a parsed product-report item to its canonical unique fish name.
+// 1) Exact/case-insensitive match of the title (key minus size) in the map.
+// 2) Fallback heuristic (Fillet→Premium) for any variant not yet in the sheet.
+function normalizeFishKey(item) {
+  const title = stripSizeSuffix(item.key);
+  if (FISH_UNIQUE_NAME_MAP_LC[title.toLowerCase()]) {
+    return FISH_UNIQUE_NAME_MAP_LC[title.toLowerCase()];
+  }
+  // Fallback — not found in the unique-names sheet, use old merge heuristic
+  const lower = (item.key || '').toLowerCase();
+  const baseName = (item.name || '').trim();
+  let variant = '';
+  if (lower.includes('fillet') || lower.includes('premium')) variant = 'Premium';
+  else if (lower.includes('regular')) variant = 'Regular';
+  return variant ? `${baseName} ${variant}` : baseName;
+}
+
+// ── DATE-WISE FISH MATRIX (merged variants) for Month Wise section ────
+// Returns { dates:[Date,...], fishNames:[name,...], matrix:{name:{dateKey:kg}} }
+function buildDateWiseFishMatrix(orders, year, month) {
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const dates = [];
+  for (let d = 1; d <= lastDay; d++) dates.push(new Date(year, month, d));
+
+  const matrix = {};
+  orders.forEach(o => {
+    if (!o.productReport) return;
+    const od = getOrderDate(o);
+    if (!od) return;
+    const dateKey = od.getFullYear() + '-' + od.getMonth() + '-' + od.getDate();
+    const items = parseProductReport(o.productReport);
+    items.forEach(item => {
+      const name = normalizeFishKey(item);
+      if (!name) return;
+      const kg = item.size.endsWith('kg')
+        ? parseFloat(item.size) * item.qty
+        : item.size.endsWith('g')
+          ? (parseFloat(item.size) / 1000) * item.qty : 0;
+      if (!matrix[name]) matrix[name] = {};
+      matrix[name][dateKey] = (matrix[name][dateKey] || 0) + kg;
+    });
+  });
+
+  const fishNames = Object.keys(matrix).sort((a, b) => {
+    const totalA = Object.values(matrix[a]).reduce((x, y) => x + y, 0);
+    const totalB = Object.values(matrix[b]).reduce((x, y) => x + y, 0);
+    return totalB - totalA;
+  });
+
+  return { dates, fishNames, matrix };
+}
+function fmtKg(n) {
+  if (!n) return '0';
+  return (n % 1 === 0) ? String(n) : n.toFixed(2);
+}
+
 // ── Parse Col G + Col J → exact fish-wise revenue ────
 // Col G: "Vanjaram – Small - 1kg ×2 | Baracuda – Medium - 500g"
 // Col J: "₹1380×2 | ₹549×1"
@@ -3143,8 +3310,8 @@ function renderMIS(allOrders, allCamps) {
       <div class="mis-card" style="overflow:hidden">
         <div class="mis-card-header">
           <div><div class="mis-card-title">Monthly Fish Breakdown</div>
-          <div class="mis-card-range">Select a month</div></div>
-          <div class="mis-card-icon">📅</div>
+          <div class="mis-card-range">Date wise · Select a month</div></div>
+          <button class="pdf-btn" onclick="downloadSectionPDF('monthFishPanel', window._currentMonthFishLabel || 'Monthly Fish Breakdown')" style="margin:0;width:auto;padding:7px 14px;font-size:11px">⬇️ PDF</button>
         </div>
         <div class="month-fish-chips" id="monthFishChips"></div>
         <div id="monthFishPanel"></div>
@@ -3385,60 +3552,47 @@ function showMonthFish(idx) {
     return;
   }
 
-  // Get all 4 weeks of this month with proper date ranges
-  const weeks = getMonthWeeks(data.year, data.month).map(w => ({
-    ...w,
-    orders: data.orders.filter(o => inRange(o, w.start, w.end))
-  }));
+  const rev = sumTotal(data.orders);
 
-  // All fish across full month
-  const fish     = buildFishReport(data.orders);
-  const rev      = sumTotal(data.orders);
-  const totalQty = fish.reduce((a,f)=>a+f.totalQty,0);
-  const totalKg  = fish.reduce((a,f)=>a+f.totalKg,0);
-  const totalVal = fish.reduce((a,f)=>a+f.totalValue,0);
+  // Date-wise matrix, with fish variants merged (Premium/Regular, all weights, Fillet→Premium)
+  const { dates, fishNames, matrix } = buildDateWiseFishMatrix(data.orders, data.year, data.month);
 
-  if (!fish.length) {
+  if (!fishNames.length) {
     panel.innerHTML = `<div class="empty-row" style="padding:20px">No product report data — run Apps Script generateAll()</div>`;
     return;
   }
 
-  // Build week fish maps
-  const weekFish = weeks.map(w => {
-    const wf = buildFishReport(w.orders);
-    const wmap = {};
-    wf.forEach(f => { wmap[f.key] = f; });
-    return { label: w.label, orders: w.orders, map: wmap, rev: sumTotal(w.orders) };
-  });
+  window._currentMonthFishLabel = data.fullLabel + ' — Fish Sold (Date Wise)';
 
-  // Header: Fish | (kgs) | Week1 Sales ₹ | (kgs) | Week2 ... | Total ₹ | (kgs)
-  const weekHeaders = weekFish.map(w =>
-    `<th style="text-align:right;padding:8px 8px;color:#90e0ef;font-size:10px;white-space:nowrap">Sales (₹)</th>
-     <th style="text-align:right;padding:8px 6px;color:#90e0ef;font-size:10px">(qty)</th>`
+  const totalKgAll = fishNames.reduce((sum, name) =>
+    sum + Object.values(matrix[name]).reduce((a,b)=>a+b,0), 0);
+
+  // Column headers — one per date in the month
+  const dateHeaders = dates.map(d =>
+    `<th style="text-align:right;padding:8px 8px;color:#90e0ef;font-size:10px;white-space:nowrap">${fmtShort(d)}</th>`
   ).join('');
 
-  const fishRows = fish.map((f, i) => {
-    const weekCols = weekFish.map(w => {
-      const wf = w.map[f.key];
-      if (!wf) return `<td style="text-align:right;color:#e0e0e0;font-size:11px;padding:7px 8px">—</td>
-                       <td style="text-align:right;color:#e0e0e0;font-size:11px;padding:7px 6px">—</td>`;
-      return `<td style="text-align:right;font-size:12px;font-weight:700;color:#1a1a2e;padding:7px 8px;white-space:nowrap">${fmtMoney(Math.round(wf.totalValue))}</td>
-              <td style="text-align:right;font-size:11px;color:#0077b6;font-weight:600;padding:7px 6px">${wf.totalQty}</td>`;
+  const fishRows = fishNames.map((name, i) => {
+    let rowTotal = 0;
+    const dateCols = dates.map(d => {
+      const key = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+      const kg = matrix[name][key] || 0;
+      rowTotal += kg;
+      return `<td style="text-align:right;font-size:11px;color:${kg?'#1a1a2e':'#ccc'};padding:7px 8px">${fmtKg(kg)}</td>`;
     }).join('');
 
     return `<tr style="${i%2===0?'':'background:#fafafa'}">
-      <td style="padding:7px 10px;font-size:12px;font-weight:600;color:#1a1a2e;max-width:180px">${f.key}</td>
-      <td style="text-align:right;font-size:12px;font-weight:800;color:#1a1a2e;padding:7px 8px;white-space:nowrap">${fmtMoney(Math.round(f.totalValue))}</td>
-      <td style="text-align:right;font-size:12px;font-weight:800;color:#0077b6;padding:7px 6px">${f.totalQty}</td>
-      ${weekCols}
+      <td style="padding:7px 10px;font-size:12px;font-weight:600;color:#1a1a2e;max-width:180px;white-space:nowrap">${name}</td>
+      <td style="text-align:right;font-size:12px;font-weight:800;color:#0077b6;padding:7px 8px;white-space:nowrap">${fmtKg(rowTotal)} kg</td>
+      ${dateCols}
     </tr>`;
   }).join('');
 
-  // Total rows per week
-  const weekTotals = weekFish.map(w => {
-    const wqty = Object.values(w.map).reduce((a,f)=>a+f.totalQty,0);
-    return `<td style="text-align:right;font-size:12px;font-weight:800;color:#1a1a2e;padding:8px 8px;background:#f0f0f0;white-space:nowrap">${fmtMoney(Math.round(w.rev))}</td>
-            <td style="text-align:right;font-size:12px;font-weight:800;color:#0077b6;padding:8px 6px;background:#f0f0f0">${wqty}</td>`;
+  // Total row per date column
+  const dateTotals = dates.map(d => {
+    const key = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+    const colTotal = fishNames.reduce((a,name)=>a+(matrix[name][key]||0),0);
+    return `<td style="text-align:right;font-size:11px;font-weight:800;color:#1a1a2e;padding:8px 8px;background:#f0f0f0">${fmtKg(colTotal)}</td>`;
   }).join('');
 
   panel.innerHTML = `
@@ -3449,12 +3603,12 @@ function showMonthFish(idx) {
         <div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase">Orders</div>
       </div>
       <div style="background:#fff;padding:10px 8px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:#1a1a2e">${fish.length}</div>
-        <div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase">Varieties</div>
+        <div style="font-size:18px;font-weight:800;color:#1a1a2e">${fishNames.length}</div>
+        <div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase">Fish Types</div>
       </div>
       <div style="background:#fff;padding:10px 8px;text-align:center">
-        <div style="font-size:18px;font-weight:800;color:#1a1a2e">${totalQty}</div>
-        <div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase">Total Qty</div>
+        <div style="font-size:18px;font-weight:800;color:#1a1a2e">${fmtKg(totalKgAll)}</div>
+        <div style="font-size:10px;color:#888;font-weight:600;text-transform:uppercase">Total Kg</div>
       </div>
       <div style="background:#fff;padding:10px 8px;text-align:center">
         <div style="font-size:15px;font-weight:800;color:#1a1a2e">${fmtMoney(Math.round(rev))}</div>
@@ -3462,30 +3616,26 @@ function showMonthFish(idx) {
       </div>
     </div>
 
-    <!-- Week header row -->
+    <!-- Date-wise fish table -->
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:${300 + dates.length*70}px">
         <thead>
-          <!-- Month label row -->
           <tr style="background:#e8edf2">
-            <td colspan="3" style="padding:6px 10px;font-size:11px;font-weight:700;color:#1a1a2e">${data.fullLabel}</td>
-            ${weekFish.map(w=>`<td colspan="2" style="padding:6px 8px;text-align:center;font-size:10px;font-weight:700;color:#1a1a2e;border-left:1px solid #d0d8e0">${w.label}<br><span style="font-size:9px;font-weight:500;color:#666">${w.dateLabel}</span></td>`).join('')}
+            <td colspan="2" style="padding:6px 10px;font-size:11px;font-weight:700;color:#1a1a2e">${data.fullLabel}</td>
+            <td colspan="${dates.length}" style="padding:6px 8px;text-align:center;font-size:10px;font-weight:700;color:#1a1a2e;border-left:1px solid #d0d8e0">KG's sold date wise</td>
           </tr>
-          <!-- Column headers -->
           <tr style="background:#1a1a2e">
-            <th style="padding:8px 10px;color:#90e0ef;font-size:10px;text-align:left;min-width:160px">Fish / Product</th>
-            <th style="padding:8px 8px;color:#90e0ef;font-size:10px;text-align:right">Total ₹</th>
-            <th style="padding:8px 6px;color:#90e0ef;font-size:10px;text-align:right">Qty</th>
-            ${weekHeaders}
+            <th style="padding:8px 10px;color:#90e0ef;font-size:10px;text-align:left;min-width:150px">Fish Name</th>
+            <th style="padding:8px 8px;color:#90e0ef;font-size:10px;text-align:right;white-space:nowrap">Total Kg</th>
+            ${dateHeaders}
           </tr>
         </thead>
         <tbody>${fishRows}</tbody>
         <tfoot>
           <tr style="border-top:2px solid #1a1a2e">
             <td style="padding:8px 10px;font-size:12px;font-weight:800;color:#1a1a2e;background:#f0f0f0">Total</td>
-            <td style="text-align:right;font-size:12px;font-weight:800;color:#1a1a2e;padding:8px 8px;background:#f0f0f0;white-space:nowrap">${fmtMoney(Math.round(rev))}</td>
-            <td style="text-align:right;font-size:12px;font-weight:800;color:#0077b6;padding:8px 6px;background:#f0f0f0">${totalQty}</td>
-            ${weekTotals}
+            <td style="text-align:right;font-size:12px;font-weight:800;color:#0077b6;padding:8px 8px;background:#f0f0f0;white-space:nowrap">${fmtKg(totalKgAll)} kg</td>
+            ${dateTotals}
           </tr>
         </tfoot>
       </table>
