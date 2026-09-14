@@ -939,6 +939,7 @@ const FISH_UNIQUE_NAME_MAP = {
   'Barramundi (Koduva) Regular Slices': 'Barramundi (Koduva)',
   'Black Pomfret (Karuppu Vavval) Cleaned Whole Fish': 'Black Pomfret (Karuppu Vavval)',
   'Black Pomfret (Karuppu Vavval) Premium Slices': 'Black Pomfret (Karuppu Vavval)',
+  'Black Pomfret (Karuppu Vavval) Regular Slices': 'Black Pomfret (Karuppu Vavval)',
   'Black Sea Bass (Kal Koduva) Curry Cuts': 'Black Sea Bass (Kal Koduva)',
   'Black Sea Bass (Kal Koduva) Fillets': 'Black Sea Bass (Kal Koduva)',
   'Black Sea Bass (Kal Koduva) Premium Slices': 'Black Sea Bass (Kal Koduva)',
@@ -1011,6 +1012,9 @@ const FISH_UNIQUE_NAME_MAP = {
   'Tomato Grouper (Thakkali Kalava) Regular Slices': 'Tomato Grouper (Thakkali Kalava)',
   'Trevally (Thengai Paarai) Premium Slices': 'Trevally (Thengai Paarai)',
   'Trevally (Thengai Paarai) Regular Slices': 'Trevally (Thengai Paarai)',
+  // Spelling variant seen in live order data ("Thegai" missing the 'n')
+  'Trevally (Thegai Paarai) Premium Slices': 'Trevally (Thengai Paarai)',
+  'Trevally (Thegai Paarai) Regular Slices': 'Trevally (Thengai Paarai)',
   'Tuna (Choora) Cubes - Without Skin': 'Tuna (Choora)',
   'Tuna (Choora) Fillets / Slices - Without Skin': 'Tuna (Choora)',
   'White Pomfret (Vella Vavval) Cleaned Whole Fish': 'White Pomfret (Vella Vavval)',
@@ -1035,21 +1039,28 @@ function stripSizeSuffix(key) {
   return m ? key.slice(0, key.length - m[0].length).trim() : (key || '').trim();
 }
 
+// Strip every known variant/cut/size-tag word out of a title, leaving just
+// the plain fish name — used ONLY when a title has no entry in the map, so
+// the word "Premium"/"Regular"/"Fillet" etc never leaks into a fish name.
+function stripVariantWords(str) {
+  return (str || '')
+    .replace(/\b(premium|regular|fillets?|slices?|cuts?|curry|cleaned|whole|fish|thick|small|medium|large|big|jumbo|without\s+skin|cubes?)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\(\s*\)/g, '')
+    .trim();
+}
+
 // Resolve a parsed product-report item to its canonical unique fish name.
 // 1) Exact/case-insensitive match of the title (key minus size) in the map.
-// 2) Fallback heuristic (Fillet→Premium) for any variant not yet in the sheet.
+// 2) Fallback: title not yet in the sheet — strip all known variant/cut
+//    words so no variant text ever shows up in the fish name.
 function normalizeFishKey(item) {
   const title = stripSizeSuffix(item.key);
   if (FISH_UNIQUE_NAME_MAP_LC[title.toLowerCase()]) {
     return FISH_UNIQUE_NAME_MAP_LC[title.toLowerCase()];
   }
-  // Fallback — not found in the unique-names sheet, use old merge heuristic
-  const lower = (item.key || '').toLowerCase();
-  const baseName = (item.name || '').trim();
-  let variant = '';
-  if (lower.includes('fillet') || lower.includes('premium')) variant = 'Premium';
-  else if (lower.includes('regular')) variant = 'Regular';
-  return variant ? `${baseName} ${variant}` : baseName;
+  const cleaned = stripVariantWords(title);
+  return cleaned || title.trim();
 }
 
 // ── DATE-WISE FISH MATRIX (merged variants) for Month Wise section ────
