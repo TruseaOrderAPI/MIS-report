@@ -778,6 +778,10 @@ body {
 
 <div class="footer-note" id="footerNote"></div>
 
+<!-- Export libraries — used by the Download (Excel/Word/PDF/PPT) buttons -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+
 <script>
 // ── CONFIG ──────────────────────────────────────────
 const SHEET_ID   = '1LdJAHcoYX8ruxVEKG5j-X1KyaZohOLfhyYaUBmsVoyI';
@@ -1407,6 +1411,15 @@ function renderCustomerReport(allOrders) {
       .map(([name, qty]) => `<div style="font-size:11px;color:#1a1a2e;padding:2px 0;border-bottom:1px solid #f5f5f5;display:flex;justify-content:space-between;gap:8px"><span>${name}</span><span style="font-weight:700;color:#0077b6;white-space:nowrap">${qty} qty</span></div>`)
       .join('');
 
+    // Total Qty Bought — actual product quantities across ALL this customer's
+    // orders (uses the existing parseProductReport logic, so "×2" multipliers
+    // etc are correctly counted — NOT just number of orders).
+    const totalQtyBought = c.orders.reduce((sum, o) => {
+      if (!o.productReport) return sum;
+      const items = parseProductReport(o.productReport);
+      return sum + items.reduce((s, item) => s + (item.qty || 0), 0);
+    }, 0);
+
     const monthCols = months.map(m => {
       const mStart  = new Date(m.year, m.month, 1);
       const mEnd    = new Date(m.year, m.month+1, 0, 23, 59, 59);
@@ -1429,6 +1442,7 @@ function renderCustomerReport(allOrders) {
         <div style="font-size:11px;color:#888">📞 ${c.phone}</div>
       </td>
       <td style="text-align:center;font-size:14px;font-weight:800;color:#1a1a2e;padding:8px 6px">${c.orders.length}</td>
+      <td style="text-align:center;font-size:13px;font-weight:800;color:#0077b6;padding:8px 6px">${totalQtyBought}</td>
       <td style="text-align:right;font-size:13px;font-weight:800;color:#1a1a2e;white-space:nowrap;padding:8px 10px">${fmtMoney(c.totalSpend)}</td>
       <td style="padding:8px 10px;min-width:180px">
         ${fishItems || '<span style="color:#ddd;font-size:11px">—</span>'}
@@ -1440,6 +1454,10 @@ function renderCustomerReport(allOrders) {
   // Grand total footer
   const grandOrders = custs.reduce((a,c)=>a+c.orders.length,0);
   const grandValue  = custs.reduce((a,c)=>a+c.totalSpend,0);
+  const grandQtyBought = custs.reduce((sum, c) => sum + c.orders.reduce((s, o) => {
+    if (!o.productReport) return s;
+    return s + parseProductReport(o.productReport).reduce((x, item) => x + (item.qty || 0), 0);
+  }, 0), 0);
   const monthTotals = months.map(m => {
     const mStart = new Date(m.year, m.month, 1);
     const mEnd   = new Date(m.year, m.month+1, 0, 23, 59, 59);
@@ -1453,12 +1471,13 @@ function renderCustomerReport(allOrders) {
   return `
     <div id="customerTableContent">
       <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:600px">
           <thead>
             <tr style="background:#1a1a2e;-webkit-print-color-adjust:exact;print-color-adjust:exact">
               <th style="padding:10px 6px;color:#90e0ef;font-size:10px;text-align:center;width:32px">#</th>
               <th style="padding:10px 12px;color:#90e0ef;font-size:10px;text-align:left">Customer</th>
               <th style="padding:10px 6px;color:#90e0ef;font-size:10px;text-align:center">Orders</th>
+              <th style="padding:10px 6px;color:#90e0ef;font-size:10px;text-align:center;white-space:nowrap">Total Qty Bought</th>
               <th style="padding:10px 8px;color:#90e0ef;font-size:10px;text-align:right">Total Value</th>
               <th style="padding:10px 10px;color:#90e0ef;font-size:10px;text-align:left;min-width:180px">Order Items</th>
               ${months.map(m=>`<th style="padding:10px 6px;color:#90e0ef;font-size:10px;text-align:center;white-space:nowrap">${m.label}</th>`).join('')}
@@ -1469,6 +1488,7 @@ function renderCustomerReport(allOrders) {
             <tr style="background:#f0f0f0;border-top:2px solid #1a1a2e">
               <td colspan="3" style="padding:10px 12px;font-size:12px;font-weight:800;color:#1a1a2e">Total</td>
               <td style="padding:10px 6px;text-align:center;font-size:14px;font-weight:800;color:#1a1a2e">${grandOrders}</td>
+              <td style="padding:10px 6px;text-align:center;font-size:13px;font-weight:800;color:#0077b6">${grandQtyBought}</td>
               <td style="padding:10px 8px;text-align:right;font-size:13px;font-weight:800;color:#1a1a2e;white-space:nowrap">${fmtMoney(grandValue)}</td>
               <td style="padding:10px 10px"></td>
               ${monthTotals}
@@ -2471,6 +2491,122 @@ function downloadSectionPDF(sectionId, title) {
   setTimeout(()=>{ win.print(); win.close(); }, 600);
 }
 
+// ══════════════════════════════════════════════════
+// GENERIC DOWNLOAD MENU — Excel / Word / PDF / PowerPoint
+// Reusable on any report section. Exports exactly what is
+// currently displayed in that section's table(s) — nothing else.
+// ══════════════════════════════════════════════════
+
+// Renders a "⬇️ Download" button + 4-option dropdown. Drop this HTML into
+// any mis-card-header, passing the section's element id and a clean
+// filename base (spaces become underscores automatically).
+function renderDownloadMenu(sectionId, filenameBase) {
+  const menuId = 'dlm_' + sectionId;
+  return `
+    <div style="position:relative;display:inline-block" class="dl-menu-wrap">
+      <button class="pdf-btn" onclick="toggleDownloadMenu('${menuId}')" style="margin:0;width:auto;padding:7px 14px;font-size:11px">⬇️ Download</button>
+      <div id="${menuId}" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #e0e0e0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:50;min-width:150px;overflow:hidden">
+        <div onclick="downloadSectionAs('excel','${sectionId}','${filenameBase}');toggleDownloadMenu('${menuId}')" style="padding:9px 14px;font-size:12px;font-weight:600;color:#1a1a2e;cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f5f8fa'" onmouseout="this.style.background=''">📊 Excel (.xlsx)</div>
+        <div onclick="downloadSectionAs('word','${sectionId}','${filenameBase}');toggleDownloadMenu('${menuId}')" style="padding:9px 14px;font-size:12px;font-weight:600;color:#1a1a2e;cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f5f8fa'" onmouseout="this.style.background=''">📄 Word (.doc)</div>
+        <div onclick="downloadSectionAs('pdf','${sectionId}','${filenameBase}');toggleDownloadMenu('${menuId}')" style="padding:9px 14px;font-size:12px;font-weight:600;color:#1a1a2e;cursor:pointer;border-bottom:1px solid #f5f5f5" onmouseover="this.style.background='#f5f8fa'" onmouseout="this.style.background=''">📕 PDF</div>
+        <div onclick="downloadSectionAs('ppt','${sectionId}','${filenameBase}');toggleDownloadMenu('${menuId}')" style="padding:9px 14px;font-size:12px;font-weight:600;color:#1a1a2e;cursor:pointer" onmouseover="this.style.background='#f5f8fa'" onmouseout="this.style.background=''">📽️ PowerPoint (.pptx)</div>
+      </div>
+    </div>`;
+}
+
+function toggleDownloadMenu(menuId) {
+  document.querySelectorAll('.dl-menu-wrap > div').forEach(m => {
+    if (m.id !== menuId) m.style.display = 'none';
+  });
+  const el = document.getElementById(menuId);
+  if (el) el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+}
+// Close any open download menu when clicking elsewhere
+document.addEventListener('click', e => {
+  if (!e.target.closest('.dl-menu-wrap')) {
+    document.querySelectorAll('.dl-menu-wrap > div').forEach(m => m.style.display = 'none');
+  }
+});
+
+function safeFileName(base) {
+  return (base || 'TruSea_Report').replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g,'');
+}
+
+function downloadSectionAs(format, sectionId, filenameBase) {
+  const section = document.getElementById(sectionId);
+  if (!section) { alert('Could not find this section to export.'); return; }
+  const fname = safeFileName(filenameBase);
+
+  if (format === 'pdf') {
+    downloadSectionPDF(sectionId, filenameBase.replace(/_/g,' '));
+    return;
+  }
+
+  const table = section.querySelector('table');
+
+  if (format === 'excel') {
+    if (typeof XLSX === 'undefined') { alert('Excel export library failed to load — check your internet connection and try again.'); return; }
+    if (!table) { alert('No table data found in this section to export.'); return; }
+    const wb = XLSX.utils.table_to_book(table, { sheet: filenameBase.slice(0,28) || 'Report' });
+    XLSX.writeFile(wb, `${fname}.xlsx`);
+    return;
+  }
+
+  if (format === 'word') {
+    const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head><meta charset='utf-8'><title>${filenameBase}</title>
+      <style>
+        body{font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000;}
+        h2{font-size:14pt;font-weight:bold;margin-bottom:4px;}
+        table{border-collapse:collapse;width:100%;}
+        th,td{border:1px solid #ccc;padding:6px 8px;font-size:10pt;}
+        th{background:#eee;font-weight:bold;}
+        button,select{display:none;}
+      </style></head>
+      <body>
+        <h2>TruSea Fish — ${filenameBase.replace(/_/g,' ')}</h2>
+        <p style="font-size:9pt;color:#666">Generated: ${new Date().toLocaleString('en-IN')}</p>
+        ${section.innerHTML}
+      </body></html>`;
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${fname}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    return;
+  }
+
+  if (format === 'ppt') {
+    if (typeof PptxGenJS === 'undefined') { alert('PowerPoint export library failed to load — check your internet connection and try again.'); return; }
+    if (!table) { alert('No table data found in this section to export.'); return; }
+    const pptx = new PptxGenJS();
+    pptx.defineLayout({ name: 'WIDE', width: 13.33, height: 7.5 });
+    pptx.layout = 'WIDE';
+    const slide = pptx.addSlide();
+    slide.addText(filenameBase.replace(/_/g,' '), { x: 0.4, y: 0.25, fontSize: 20, bold: true, color: '1A1A2E' });
+    slide.addText(`Generated: ${new Date().toLocaleString('en-IN')}`, { x: 0.4, y: 0.75, fontSize: 10, color: '888888' });
+
+    const rows = [];
+    table.querySelectorAll('tr').forEach(tr => {
+      const cells = Array.from(tr.querySelectorAll('th,td')).map(td => (td.innerText || '').trim());
+      if (cells.length) rows.push(cells);
+    });
+    if (!rows.length) { alert('No rows found to export.'); return; }
+
+    const ppRows = rows.map((r, ri) => r.map(text => ({
+      text,
+      options: ri === 0
+        ? { bold: true, color: 'FFFFFF', fill: { color: '1A1A2E' }, fontSize: 9 }
+        : { fontSize: 8, fill: { color: ri % 2 === 0 ? 'FFFFFF' : 'F7F9FA' } }
+    })));
+    slide.addTable(ppRows, { x: 0.4, y: 1.2, w: 12.5, autoPage: true, autoPageCharWeight: -1 });
+    pptx.writeFile({ fileName: `${fname}.pptx` });
+    return;
+  }
+}
+
 // ── TREND METRIC TOGGLE ───────────────────────────────
 function switchTrendMetric(metric) {
   const d = window._hlGraphData;
@@ -3360,7 +3496,7 @@ function renderMIS(allOrders, allCamps) {
       <div class="mis-card">
         <div class="mis-card-header">
           <div><div class="mis-card-title">Customer Summary</div><div class="mis-card-range">S.No · Name · Orders · Value · Month-wise</div></div>
-          <button class="pdf-btn" onclick="downloadCustomerPDF()" style="margin:0;width:auto;padding:7px 14px;font-size:11px">⬇️ PDF</button>
+          ${renderDownloadMenu('customerTableContent', 'TruSea_Customer_Report')}
         </div>
         ${renderCustomerReport(allOrders)}
       </div>
